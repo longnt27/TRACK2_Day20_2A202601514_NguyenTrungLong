@@ -1,180 +1,55 @@
-# Reflection — Day 20 Lab (Personal Report)
+Reflection Day 20.
 
-> **Đây là báo cáo cá nhân.** Số liệu của bạn **không** so sánh được với bạn cùng lớp
-> — chỉ so **before vs after trên chính máy bạn**. Rubric chấm độ rõ ràng của setup,
-> đo lường và **lập luận**, không chấm tốc độ tuyệt đối.
->
-> `make verify` sẽ fail nếu còn placeholder chưa điền. Đó là cố ý.
+Họ tên Nguyễn Trung Long.
 
-**Họ Tên:** _<Họ Tên>_
-**Cohort:** _<A20-K1 / A20-K2 / ...>_
-**Ngày submit:** _<YYYY-MM-DD>_
+Cohort 4.
 
----
+Ngày submit 2026 08 20.
 
-## 1. Hardware & runtime  *(rubric 1, 2 — 10 điểm)*
+1. Hardware và runtime.
 
-> Từ `make probe`. Paste output hoặc điền tay.
+Mình chạy bài trên Mac mini với macOS 26.5.2. Máy dùng Apple M4, 10 core vật lý, 10 core logic, 16 GB RAM và Apple Metal. Runtime là llama.cpp b10488. Model là Qwen3.5 0.8B. Hai bản quant là Q4 K M và UD Q2 K XL.
 
-- **OS:** _<macOS 14 / Windows 11 / Ubuntu 24.04 / ...>_
-- **CPU:** _<Apple M2 / Intel i7-12700H / AMD Ryzen 7 5800H>_
-- **Cores:** _<physical / logical>_
-- **CPU extensions:** _<AVX2 / AVX-512 / NEON / —>_
-- **RAM:** _<GB>_
-- **Accelerator:** _<NVIDIA RTX 4060 / Apple Metal / Vulkan / CPU only>_
-- **llama.cpp asset đã tải:** _<vd: llama-b10488-bin-macos-arm64.tar.gz>_
-- **Model đã dùng:** _<Gemma 4 E2B / Qwen3.5 0.8B>_ (`LAB_MODEL=`_<gemma4-e2b / qwen35-0.8b>_)
-- **Quantization:** _<primary>_ + _<compare>_ (từ `models/active.json`)
+Setup nhìn chung khá thẳng. Lần probe đầu trong sandbox đọc RAM thành 0 GB vì sysctl bị chặn. Chạy setup ngoài sandbox thì nhận đúng Apple M4 và 16 GB RAM. Mình chọn Qwen nhỏ để load test hoàn thành được nhiều request hơn.
 
-**Chạy ở đâu:** _<laptop của tôi / Colab / Kaggle>_
-_(Nếu dùng cloud fallback: nói rõ vì sao — RAM < 8 GB, setup fail, v.v. Không mất điểm.)_
+2. Đo lường.
 
-**Setup story** (≤ 80 chữ): điều gì cần thay đổi để lab chạy trên máy bạn? Có bước
-nào fail rồi phải workaround không?
+Q4 K M có dung lượng 0.50 GB và load trong 1067 ms. TTFT P50 và P95 là 47 ms và 57 ms. TPOT P50 và P95 là 8.8 ms và 9.5 ms. E2E P50, P95 và P99 là 598 ms, 658 ms và 658 ms. Decode đạt 113.8 token mỗi giây.
 
-_Answer here._
+UD Q2 K XL có dung lượng 0.39 GB và load trong 1029 ms. TTFT P50 và P95 là 45 ms và 46 ms. TPOT P50 và P95 là 8.2 ms và 8.3 ms. E2E P50, P95 và P99 là 560 ms, 568 ms và 568 ms. Decode đạt 122.3 token mỗi giây.
 
----
+Q2 nhỏ hơn 22 phần trăm và decode nhanh hơn 1.07 lần. Nhưng khi thử 5 câu, Q2 chỉ đúng hoàn toàn 1 câu, Q4 đúng 2 câu. Q2 cũng hay trả lời dài và sai format. Máy mình đủ RAM nên mình chọn Q4. Tăng 7 phần trăm tốc độ không đáng để đổi lấy chất lượng thấp hơn.
 
-## 2. Đo lường  *(rubric 3, 4, 5 — 20 điểm)*
+3. Serving khi có tải.
 
-> Paste bảng từ `benchmarks/01-quickstart-results.md` (`make bench` tự sinh).
+Ở 10 users có 137 request, RPS là 2.34. P50, P95 và P99 là 3200 ms, 5000 ms và 5300 ms. Effective concurrency là 7.7. Không có request lỗi.
 
-| Quantization | Size (GB) | Load (ms) | TTFT P50/P95 (ms) | TPOT P50/P95 (ms) | E2E P50/P95/P99 (ms) | Decode (tok/s) |
-|---|--:|--:|--:|--:|--:|--:|
-| UD-Q4_K_XL | | | | | | |
-| UD-Q2_K_XL | | | | | | |
+Ở 50 users có 137 request, RPS là 2.32. P50, P95 và P99 là 19000 ms, 23000 ms và 24000 ms. Effective concurrency là 40.3. Không có request lỗi.
 
-**Quan sát** (≤ 60 chữ): 2-bit nhanh hơn bao nhiêu, và **có đáng không**? Bạn đã thử
-hỏi cùng một câu trên cả hai (`make serve` vs `.venv/bin/python labs/02-serve/serve.py --compare`)
-chưa? Chất lượng khác nhau thế nào?
+Load tăng 5 lần nhưng throughput còn giảm nhẹ xuống 0.99 lần. P95 tăng 4.60 lần. Peak busy slot là 3.96 trên 4 và có lúc 46 request bị deferred. Server đã bão hòa trước 50 users. Latency tăng thêm chủ yếu là thời gian nằm trong queue. Nếu cần giữ P95 dưới 6 giây, mình sẽ thêm replica trước. Tăng slot trên cùng Metal có thể làm mỗi request chậm hơn.
 
-_Answer here._
+4. Integration.
 
----
+N16 Cloud và IaC là stub. N17 data pipeline là stub. N18 lakehouse là stub. N19 retrieval và features là stub, phần retrieval đang dùng keyword overlap. N20 llama server là phần real.
 
-## 3. Serving under load  *(rubric 8, 9, 10 — 20 điểm)*
+Mean latency của embed là 0.0 ms. Retrieve là 0.0 ms. LLM là 1327.8 ms và chiếm gần như toàn bộ thời gian. Kết quả này đúng với dự đoán vì corpus nhỏ và retrieval rất nhẹ. Nếu cần giảm một nửa latency, mình sẽ giảm số output token hoặc cache câu trả lời. Tối ưu retrieval gần 0 ms sẽ không tạo khác biệt đáng kể.
 
-> Từ `benchmarks/02-server-results.md` (`make load-report`).
+5. Thay đổi quan trọng nhất.
 
-| Users | RPS | P50 (ms) | P95 (ms) | P99 (ms) | Eff. concurrency | Failures |
-|--:|--:|--:|--:|--:|--:|--:|
-| 10 | | | | | | |
-| 50 | | | | | | |
+Mình tăng số thread từ 1 lên 10. Tốc độ tăng từ 111.0 lên 114.2 token mỗi giây, tương đương 1.03 lần.
 
-- **Offered load tăng 5×, throughput thực tăng:** _<X.XX>×_
-- **P95 tăng:** _<X.XX>×_
-- **Effective concurrency ở 50 users:** _<số>_ so với `--parallel` = _<số>_ slots
+Mức tăng nhỏ vì phần nặng đã chạy trên Metal với toàn bộ layer được offload. CPU chủ yếu chuẩn bị graph và scheduling. Từ 1 lên 10 thread vẫn giảm được phần việc tuần tự. Khi tăng lên 20 thread, tốc độ giảm còn 112.1 token mỗi giây. Máy chỉ có 10 core vật lý nên thread thêm bắt đầu tranh lịch và cache. Thêm CPU thread cũng không tạo thêm GPU hay memory bandwidth.
 
-**Peak `llamacpp:n_busy_slots_per_decode`** (từ `make metrics` khi `make load-50` đang
-chạy): _<số>_ / _<slots>_ slots
+6. Bonus.
 
-**Saturation reading** (≤ 80 chữ): server của bạn bão hoà ở đâu, và **bằng chứng nào**
-thuyết phục bạn? Nếu P95 tăng nhanh hơn RPS thì phần latency thêm đó là queue time hay
-compute time — bạn biết bằng cách nào? Nếu bạn phải nâng goodput@SLO, bạn sẽ đổi knob
-nào **trước**, và vì sao knob đó?
+Mình đã build llama.cpp native, chạy context sweep, làm challenge chất lượng quant và đo embedding serving.
 
-_Answer here._
+Native CPU đạt 35.1 token mỗi giây, prebuilt CPU đạt 32.6 token mỗi giây. Speedup là 1.08 lần. Native build dùng instruction phù hợp hơn với Apple M4, nhưng khoảng cách nhỏ vì decode vẫn bị giới hạn nhiều bởi memory bandwidth.
 
----
+Context 8192 token tốn 4.60 giây prefill, cao hơn tuyến tính 1.16 lần. Điều này cho thấy không nên nhét đầy context chỉ vì model còn chỗ.
 
-## 4. Integration  *(rubric 12, 13 — 15 điểm)*
+Embedding throughput tăng từ 25.1 lên 37.1 text mỗi giây khi batch tăng từ 1 lên 16. Throughput gần như phẳng từ batch 4. Batch lớn hơn làm latency tăng nhưng không đem lại nhiều throughput.
 
-> Từ `make pipeline`. Nói thật cái nào real, cái nào stub — stub **không** mất điểm.
+7. Điều làm mình bất ngờ nhất.
 
-| Day | Piece | Real hay stub? |
-|---|---|---|
-| N16 Cloud/IaC | | |
-| N17 Data pipeline | | |
-| N18 Lakehouse | | |
-| N19 Vector + features | | |
-| N20 Serving | `llama-server` | real |
-
-**Latency split** (mean của 3 query, từ output của `pipeline.py`):
-
-- embed: _<ms>_
-- retrieve: _<ms>_
-- llm: _<ms>_
-- **stage chiếm nhiều nhất:** _<stage>_ (_<%>_ của total)
-
-**Reflection** (≤ 60 chữ): bottleneck ở đâu? Có khớp với kỳ vọng của bạn không? Nếu
-phải giảm latency của pipeline này 2×, bạn sẽ tấn công vào đâu?
-
-_Answer here._
-
----
-
-## 5. The single change that mattered most  *(rubric 11 — 10 điểm)*
-
-> **Phần quan trọng nhất của report.** Không cần bonus track: `make tune` đã cho bạn
-> một before/after thật (`benchmarks/01-tuning-tg128.md`). Đổi quantization,
-> `LAB_N_CTX`, hay `--parallel` rồi đo lại cũng được.
-
-**Change:** _<vd: hạ -t từ 16 xuống 8; vd: đổi sang UD-Q2_K_XL; vd: --parallel 4 → 8>_
-
-```
-before:  <số + đơn vị>
-after:   <số + đơn vị>
-speedup: <X.Y>×
-```
-
-**Tại sao nó work** (1–2 đoạn — đây là phần grader đọc kỹ nhất):
-
-_Giải thích như đang nói với bạn ngồi cạnh. Bám vào **cơ chế**, không phải "vibes":
-memory bandwidth? vector width? cache residency? scheduling? queueing? Nếu kết quả
-**khác** với kỳ vọng từ deck — nói rõ, và giải thích vì sao. Grader thưởng điểm cho
-lập luận đúng về một kết quả bất ngờ, hơn là một con số đẹp không được giải thích._
-
-_Answer here._
-
----
-
-## 6. Bonus  *(optional — tối đa 20 điểm)*
-
-> Bỏ trống nếu không làm. Xem `bonus/README.md`. Đừng làm hết — **một** finding sâu
-> ăn điểm hơn năm bảng nông.
-
-**Đã làm:** _<B1 build-compare / B2 sweep nào / B4 challenge nào / B5 lựa chọn nào>_
-
-**Numbers:**
-
-```
-before:  <số>
-after:   <số>
-speedup: <X.Y>×
-```
-
-**Điều này nói lên gì mà deck chưa nói:**
-
-_(để trống nếu bạn không làm phần này)_
-
----
-
-## 7. Điều làm bạn ngạc nhiên nhất  *(optional)*
-
-_(1–2 câu. Không bắt buộc, nhưng grader đọc hết.)_
-
-_(để trống nếu bạn không làm phần này)_
-
----
-
-## 8. Self-check trước khi push
-
-- [ ] `hardware.json` committed
-- [ ] `models/active.json` committed
-- [ ] `benchmarks/01-quickstart-results.md` committed (`make bench`)
-- [ ] `benchmarks/01-tuning-tg128.md` committed (`make tune`)
-- [ ] `benchmarks/02-server-results.md` committed (`make load-report`)
-- [ ] `benchmarks/02-server-batching-u50.md` hoặc `-metrics-u50.csv` committed (`make metrics`)
-- [ ] `benchmarks/locust-10_stats.csv` + `locust-50_stats.csv` committed (`make load-10` / `load-50`)
-- [ ] `benchmarks/03-integration-results.md` committed (`make pipeline`)
-- [ ] Mọi section **"required — replace this line"** trong các file `benchmarks/*.md`
-      đã được thay bằng nhận xét của bạn
-- [ ] 5 screenshots trong `submission/screenshots/`
-- [ ] `make verify` → **exit 0**
-- [ ] Repo GitHub ở chế độ **public**
-- [ ] Đã paste public URL vào VinUni LMS
-- [ ] **Không** commit `models/*.gguf` hay `runtime/` (đã có trong `.gitignore`)
-
-**Quan trọng:** repo phải **public** đến khi điểm được công bố. Private → grader không
-xem được → 0 điểm.
+Load tăng 5 lần nhưng RPS không tăng, còn P95 tăng hơn 4 lần. Queue phình nhanh hơn mình nghĩ.
